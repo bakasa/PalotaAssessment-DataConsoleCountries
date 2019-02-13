@@ -1,8 +1,7 @@
 ﻿using System;
-
-using System.Globalization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using System.Runtime.Serialization;
 
 namespace PalotaInterviewCS
 {
@@ -156,96 +155,28 @@ namespace PalotaInterviewCS
         public string Fa { get; set; }
     }
 
-    public enum Region { Africa, Americas, Asia, Empty, Europe, Oceania, Polar };
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum Region
+    {
+        [EnumMember(Value = "")]
+        Empty,
+        [EnumMember(Value = "Africa")]
+        Africa,
+        [EnumMember(Value = "Americas")]
+        Americas,
+        [EnumMember(Value = "Asia")]
+        Asia,
+        [EnumMember(Value = "Europe")]
+        Europe,
+        [EnumMember(Value = "Oceania")]
+        Oceania,
+        [EnumMember(Value = "Polar")]
+        Polar
+    }
 
     public partial class Country
     {
-        public static Country[] FromJson(string json) => JsonConvert.DeserializeObject<Country[]>(json, PalotaInterviewCS.Converter.Settings);
+        public static Country[] FromJson(string json) => JsonConvert.DeserializeObject<Country[]>(json);
+        public static string ToJson(Country[] self) => JsonConvert.SerializeObject(self);
     }
-
-    public static class Serialize
-    {
-        public static string ToJson(this Country[] self) => JsonConvert.SerializeObject(self, PalotaInterviewCS.Converter.Settings);
-    }
-
-    internal static class Converter
-    {
-        public static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
-        {
-            MetadataPropertyHandling = MetadataPropertyHandling.Ignore,
-            DateParseHandling = DateParseHandling.None,
-            Converters =
-            {
-                RegionConverter.Singleton,
-                new IsoDateTimeConverter { DateTimeStyles = DateTimeStyles.AssumeUniversal }
-            },
-        };
-    }
-
-    internal class RegionConverter : JsonConverter
-    {
-        public override bool CanConvert(Type t) => t == typeof(Region) || t == typeof(Region?);
-
-        public override object ReadJson(JsonReader reader, Type t, object existingValue, JsonSerializer serializer)
-        {
-            if (reader.TokenType == JsonToken.Null) return null;
-            var value = serializer.Deserialize<string>(reader);
-            switch (value)
-            {
-                case "":
-                    return Region.Empty;
-                case "Africa":
-                    return Region.Africa;
-                case "Americas":
-                    return Region.Americas;
-                case "Asia":
-                    return Region.Asia;
-                case "Europe":
-                    return Region.Europe;
-                case "Oceania":
-                    return Region.Oceania;
-                case "Polar":
-                    return Region.Polar;
-            }
-            throw new Exception("Cannot unmarshal type Region");
-        }
-
-        public override void WriteJson(JsonWriter writer, object untypedValue, JsonSerializer serializer)
-        {
-            if (untypedValue == null)
-            {
-                serializer.Serialize(writer, null);
-                return;
-            }
-            var value = (Region)untypedValue;
-            switch (value)
-            {
-                case Region.Empty:
-                    serializer.Serialize(writer, "");
-                    return;
-                case Region.Africa:
-                    serializer.Serialize(writer, "Africa");
-                    return;
-                case Region.Americas:
-                    serializer.Serialize(writer, "Americas");
-                    return;
-                case Region.Asia:
-                    serializer.Serialize(writer, "Asia");
-                    return;
-                case Region.Europe:
-                    serializer.Serialize(writer, "Europe");
-                    return;
-                case Region.Oceania:
-                    serializer.Serialize(writer, "Oceania");
-                    return;
-                case Region.Polar:
-                    serializer.Serialize(writer, "Polar");
-                    return;
-            }
-            throw new Exception("Cannot marshal type Region");
-        }
-
-        public static readonly RegionConverter Singleton = new RegionConverter();
-    }
-
 }
