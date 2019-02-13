@@ -15,3 +15,6 @@ The focus is data manipulation and structures.
 - Make sure to consider the appropriate data structures to ensure good performance
 - Use inbuilt methods where appropriate (as opposed to writing your own version)
 - Use boilerplate methods
+
+target: 
+.net core v2.2
