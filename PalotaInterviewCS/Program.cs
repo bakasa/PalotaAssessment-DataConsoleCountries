@@ -5,17 +5,21 @@ using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace PalotaInterviewCS
 {
     class Program
     {
         private static readonly HttpClient client = new HttpClient();
-        private const string countriesEndpoint = "https://restcountries.eu/rest/v2/all";
+        private const string CountriesEndpoint = "https://restcountries.eu/rest/v2/all";
+        private const string ZAFAlpha3Code = "ZAF";
 
         static void Main(string[] args)
         {
-            Country[] countries = GetCountries(countriesEndpoint).GetAwaiter().GetResult();
+            Country[] countries = GetCountries(CountriesEndpoint).GetAwaiter().GetResult();
 
             Console.ForegroundColor = ConsoleColor.Blue;
             Console.WriteLine("Palota Interview: Country Facts");
@@ -23,84 +27,133 @@ namespace PalotaInterviewCS
             Console.ResetColor();
 
             Random rnd = new Random(); // random to populate fake answer - you can remove this once you use real values
+            
+            var sortedCountries = ((countries.ToList())
+                                    .OrderByDescending(p => p.Gini)
+                                    .ThenBy(p => p.Gini.HasValue)).ToList();
 
-            //TODO use data operations and data structures to optimally find the correct value (N.B. be aware of null values)
-
-            /*
-             * HINT: Sort the list in descending order to find South Africa's place in terms of gini coefficients
-             * `Country.Gini` is the relevant field to use here           
-             */
-            int southAfricanGiniPlace = rnd.Next(1, 10); // Use correct value
+            int southAfricanGiniPlace = sortedCountries.FindIndex(c => c.Alpha3Code.Equals(ZAFAlpha3Code, StringComparison.CurrentCultureIgnoreCase)) + 1; 
             Console.WriteLine($"1. South Africa's Gini coefficient is the {GetOrdinal(southAfricanGiniPlace)} highest");
+            
+            var sortedAscGiniCountries = sortedCountries
+                    .OrderBy(p => p.Gini)
+                    .Where(p => p.Gini.HasValue)
+                    .ToList();
 
-            /*
-             * HINT: Sort the list in ascending order or just find the Country with the minimum gini coeficient          
-             * use `Country.Gini` for the ordering then return the relevant country's name `Country.Name`
-             */
-            string lowestGiniCountry = "ExampleCountry"; // Use correct value
+            string lowestGiniCountry = sortedAscGiniCountries[0].Name;
             Console.WriteLine($"2. {lowestGiniCountry} has the lowest Gini Coefficient");
 
-            /*
-             * HINT: Group by regions (`Country.Region`), then count the number of unique timezones that the countries in each region span
-             * Once you have done the grouping, find the group `Region` with the most timezones and return it's name and the number of unique timezones found          
-             */
-            string regionWithMostTimezones = "ExampleRegion"; // Use correct value
-            int amountOfTimezonesInRegion = rnd.Next(1, 10); // Use correct value
+            var regionsTimeZoned = new List<RegionTimeZoned>();
+            var regions = sortedCountries.GroupBy(c => c.Region).ToList();
+            
+            //foreach (var region in regions)
+            regions.ForEach(r => 
+            {
+                var uniqueTimeZonesByRegion = new Dictionary<string, string>();
+                var timeZones = r.Select(a => a.Timezones);
+                foreach (var timeZone in timeZones)
+                {
+                    foreach (var s in timeZone)
+                    {
+                        if (!s.Equals("UTC"))
+                            uniqueTimeZonesByRegion.TryAdd($"{r.Key.ToString()},{s}", s);
+                    }
+                }
+
+                regionsTimeZoned.Add( new RegionTimeZoned{ Region = r.Key, Timezones = uniqueTimeZonesByRegion});
+            });
+
+            var mostTimeZonesRegion = regionsTimeZoned.OrderByDescending(p => p.Timezones.Count).First();
+
+            string regionWithMostTimezones = mostTimeZonesRegion.Region.ToString();
+
+            int amountOfTimezonesInRegion = mostTimeZonesRegion.Timezones.Count();
             Console.WriteLine($"3. {regionWithMostTimezones} is the region that spans most timezones at {amountOfTimezonesInRegion} timezones");
+          
+            var countryCurrencies = new List<string>();
+            sortedCountries.ForEach(sc => sc.Currencies.ToList().ForEach(c => countryCurrencies.Add(c.Name)));
+            var mostPopularCurrencyObj = countryCurrencies.GroupBy(str => str)
+                                                            .Where(gd => !string.IsNullOrEmpty(gd.Key))
+                                                            .ToDictionary(group => group.Key, group => group.Count())
+                                                            .OrderByDescending(c => c.Value)
+                                                            .First();
+         
+            string mostPopularCurrency = mostPopularCurrencyObj.Key;
 
-            /*
-             * HINT: Count occurances of each currency in all countries (check `Country.Currencies`)
-             * Find the name of the currency with most occurances and return it's name (`Currency.Name`) also return the number of occurances found for that currency          
-             */
-            string mostPopularCurrency = "ExampleCurrency"; // Use correct value
-            int numCountriesUsedByCurrency = rnd.Next(1, 10); // Use correct value
+            int numCountriesUsedByCurrency = mostPopularCurrencyObj.Value;
             Console.WriteLine($"4. {mostPopularCurrency} is the most popular currency and is used in {numCountriesUsedByCurrency} countries");
+          
+            var languages = new List<string>();
+            sortedCountries.ForEach(sc => sc.Languages.ToList().ForEach(c => languages.Add(c.Name)));
+            var mostPopularLanguagesList = languages.GroupBy(str => str)
+                                    .Where(gd => !string.IsNullOrEmpty(gd.Key))
+                                    .ToDictionary(group => group.Key, group => group.Count())
+                                    .OrderByDescending(c => c.Value)
+                                    .Take(3).ToList();
 
-            /*
-             * HINT: Count the number of occurances of each language (`Country.Languages`) and sort then in descending occurances count (i.e. most populat first)
-             * Once done return the names of the top three languages (`Language.Name`)
-             */
-            string[] mostPopularLanguages = { "ExampleLanguage1", "ExampleLanguage2", "ExampleLanguage3" }; // Use correct values
+            string[] mostPopularLanguages = mostPopularLanguagesList.Select(x => x.Key).ToArray();
             Console.WriteLine($"5. The top three popular languages are {mostPopularLanguages[0]}, {mostPopularLanguages[1]} and {mostPopularLanguages[2]}");
+           
+            var countryWithBorderingCountriesDic = new Dictionary<string, long>();
+            sortedCountries.ForEach(country =>
+            {
+                if (country.Borders.Length == 0)
+                    countryWithBorderingCountriesDic.TryAdd($"{country.Name}|0|{country.Population}|{country.Area}", country.Population);
+                else
+                    country.Borders.ToList()
+                        .ForEach(c =>
+                            countryWithBorderingCountriesDic.TryAdd(
+                                $"{country.Name}|{sortedCountries.First(cc => cc.Name == country.Name).Borders.Count()}|{country.Population}|{country.Area}",
+                                country.Population +
+                                country.Borders.Sum(b => sortedCountries.Find(borderingCountry =>
+                                        borderingCountry.Alpha3Code.Equals(b,
+                                            StringComparison.InvariantCultureIgnoreCase))
+                                    .Population)));
+            });
+            
+            var countryWithBorderingCountriesObj = countryWithBorderingCountriesDic.OrderByDescending(y => y.Value).First();
+            var countryWithBorderParts = countryWithBorderingCountriesObj.Key.Split(new[] { '|' });
 
-            /*
-             * HINT: Each country has an array of Bordering countries `Country.Borders`, The array has a list of alpha3 codes of each bordering country `Country.alpha3Code`
-             * Sum up the population of each country (`Country.Population`) along with all of its bordering countries's population. Sort this list according to the combined population descending
-             * Find the country with the highest combined (with bordering countries) population the return that country's name (`Country.Name`), the number of it's Bordering countries (`Country.Borders.length`) and the combined population
-             * Be wary of null values           
-             */
-            string countryWithBorderingCountries = "ExampleCountry"; // Use correct value
-            int numberOfBorderingCountries = rnd.Next(1, 10); // Use correct value
-            int combinedPopulation = rnd.Next(1000000, 10000000); // Use correct value
+            string countryWithBorderingCountries = countryWithBorderParts[0];
+            int.TryParse(countryWithBorderParts[1], out var numberOfBorderingCountries);
+            long combinedPopulation = countryWithBorderingCountriesObj.Value;
+
             Console.WriteLine($"6. {countryWithBorderingCountries} and it's {numberOfBorderingCountries} bordering countries has the highest combined population of {combinedPopulation}");
+            
+            var popDensityDic = new Dictionary<string, decimal>();
+            countryWithBorderingCountriesDic.ToList().ForEach(c =>
+            {
+                var keyParts = c.Key.Split(new[] { '|' });
 
-            /*
-             * HINT: Population density is calculated as (population size)/area, i.e. `Country.Population/Country.Area`
-             * Calculate the population density of each country and sort by that value to find the lowest density
-             * Return the name of that country (`Country.Name`) and its calculated density.
-             * Be wary of null values when doing calculations           
-             */
-            string lowPopDensityName = "ExampleCountry"; // Use correct value
-            double lowPopDensity = rnd.NextDouble() * 100; // Use correct value
+                decimal.TryParse(keyParts[2], out var population);
+                decimal.TryParse(keyParts[3], out var area);
+
+                if (area != 0)
+                {
+                    var popDensity = population / area;
+                    popDensityDic.TryAdd(keyParts[0], popDensity);
+                }
+            });
+
+            var popDensityObj = popDensityDic.OrderBy(c => c.Value);
+
+            string lowPopDensityName = popDensityObj.First().Key;
+            decimal lowPopDensity = popDensityObj.First().Value;
             Console.WriteLine($"7. {lowPopDensityName} has the lowest population density of {lowPopDensity}");
 
-            /*
-             * HINT: Population density is calculated as (population size)/area, i.e. `Country.Population/Country.Area`
-             * Calculate the population density of each country and sort by that value to find the highest density
-             * Return the name of that country (`Country.Name`) and its calculated density.
-             * Be wary of any null values when doing calculations. Consider reusing work from above related question           
-             */
-            string highPopDensityName = "ExampleCountry"; // Use correct value
-            double highPopDensity = rnd.NextDouble() * 100; // Use correct value
+            popDensityObj = popDensityDic.OrderByDescending(c => c.Value);
+
+            string highPopDensityName = popDensityObj.First().Key;
+            decimal highPopDensity = popDensityObj.First().Value;
             Console.WriteLine($"8. {highPopDensityName} has the highest population density of {highPopDensity}");
 
-            /*
-             * HINT: Group by subregion `Country.Subregion` and sum up the area (`Country.Area`) of all countries per subregion
-             * Sort the subregions by the combined area to find the maximum (or just find the maximum)
-             * Return the name of the subregion
-             * Be wary of any null values when summing up the area           
-             */
-            string largestAreaSubregion = "ExampleSubRegion"; // Use correct value
+            var largestAreaSubregionList = sortedCountries.GroupBy(country => country)
+                .GroupBy(g => g.Key.Subregion)
+                .Where(gd => !string.IsNullOrEmpty(gd.Key))
+                .ToDictionary(g => g.Key, g => sortedCountries.Where(c => c.Subregion == g.Key).Sum(c => c.Area));
+                
+
+            string largestAreaSubregion = largestAreaSubregionList.First().Key;
             Console.WriteLine($"9. {largestAreaSubregion} is the subregion that covers the most area");
 
             /*
@@ -108,10 +161,49 @@ namespace PalotaInterviewCS
              * Sort the regional blocks by the average country gini coefficient to find the lowest (or find the lowest without sorting)
              * Return the name of the regional block (`RegionalBloc.Name`) along with the calculated average gini coefficient
              */
-            string mostEqualRegionalBlock = "ExampleRegionalBlock"; // Use correct value
-            double lowestRegionalBlockGini = rnd.NextDouble() * 10; // Use correct value
+         
+            var regionBlockDicTemp = new Dictionary<string, double>();
+            var regionBlockDic = new Dictionary<string, double>();
+            var regionalBlockList = sortedCountries.Select(c => c.RegionalBlocs);
+
+            foreach (var block in regionalBlockList)
+            {
+                foreach (var regionalBloc in block)
+                    regionBlockDicTemp.TryAdd(regionalBloc.Name, 0);
+            }
+
+            foreach (var block in regionBlockDicTemp)
+            {
+                var counter = 0;
+                var total = 0D;
+                var average = 0D;
+                
+                sortedCountries.ForEach(c =>
+                {
+                    c.RegionalBlocs.ToList().ForEach(r =>
+                    {
+                        if (r.Name == block.Key && c.Gini != null)
+                        {
+                            total += c.Gini.Value;
+                            counter++;
+                        }
+                    });
+                });
+
+                average = total / counter;
+                regionBlockDic.TryAdd(block.Key, average);
+            }
+
+            var mostEqualRegionalBlockObj = regionBlockDic.ToList().OrderBy(c => c.Value).FirstOrDefault();
+
+
+            string mostEqualRegionalBlock = mostEqualRegionalBlockObj.Key;
+            double lowestRegionalBlockGini = mostEqualRegionalBlockObj.Value;
             Console.WriteLine($"10. {mostEqualRegionalBlock} is the regional block with the lowest average Gini coefficient of {lowestRegionalBlockGini}");
+
+            Console.ReadLine();
         }
+      
 
         /// <summary>
         /// Gets the countries from a specified endpiny
@@ -121,8 +213,12 @@ namespace PalotaInterviewCS
         static async Task<Country[]> GetCountries(string path)
         {
             Country[] countries = null;
-            //TODO get data from endpoint and convert it to a typed array using Country.FromJson
-            HttpResponseMessage response = await client.GetAsync(path);
+
+            var response = await client.GetStringAsync(path);
+
+            //countries = Country.FromJson(HttpRestApiHelper.GetAsync(CountriesEndpoint));
+            countries = Country.FromJson(response);
+
             return countries;
         }
 
@@ -157,4 +253,19 @@ namespace PalotaInterviewCS
 
         }
     }
+
+    public class RegionTimeZoned
+    {
+        public Region Region { get; set; }
+        public Dictionary<string, string> Timezones;
+    }
+
+    public class CountryCurrency
+    {
+        public Country Region { get; set; }
+        public Dictionary<string, string> Currency;
+    }
+
+
+
 }
